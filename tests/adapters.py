@@ -9,6 +9,7 @@ import numpy.typing as npt
 import torch
 from torch import Tensor
 
+from cs336_basics.train_bpe import train_bpe
 
 
 def run_linear(
@@ -29,8 +30,10 @@ def run_linear(
     Returns:
         Float[Tensor, "... d_out"]: The transformed output of your linear module.
     """
-
-    raise NotImplementedError
+    in_features_batches_shape = in_features.shape[:-1]
+    out_features = in_features.view(-1, in_features.shape[-1]) @ weights.T
+    out_features = out_features.view(*in_features_batches_shape, -1)
+    return out_features
 
 
 def run_embedding(
@@ -51,7 +54,6 @@ def run_embedding(
     Returns:
         Float[Tensor, "... d_model"]: Batch of embeddings returned by your Embedding layer.
     """
-
     raise NotImplementedError
 
 
@@ -105,7 +107,18 @@ def run_scaled_dot_product_attention(
     Returns:
         Float[Tensor, " ... queries d_v"]: Output of SDPA
     """
-    raise NotImplementedError
+    d_k = Q.shape[-1]
+    # We need to perform softmax(Q @ K / sqrt(d)) @ V
+    QK = Q.matmul(K.transpose(-2, -1))
+    # Scale outputs
+    QK = QK / (d_k ** 0.5)
+    # Apply mask (fill out everything not in mask with inf)
+    QK.masked_fill_(~mask, float('-inf'))
+    # Apply softmax
+    QK = torch.softmax(QK, dim=-1)
+    # Multiply by V
+    out = QK.matmul(V)
+    return out
 
 
 def run_multihead_self_attention(
@@ -379,7 +392,12 @@ def run_rmsnorm(
         Float[Tensor,"... d_model"]: Tensor of with the same shape as `in_features` with the output of running
         RMSNorm of the `in_features`.
     """
-    raise NotImplementedError
+    # Mean with eps
+    denominator = torch.sqrt(torch.mean(in_features ** 2, dim=-1, keepdim=True) + eps)
+    scaled_in_features = in_features / denominator
+    # Scale with weights
+    out_features = scaled_in_features * weights
+    return out_features
 
 
 def run_silu(in_features: Float[Tensor, " ..."]) -> Float[Tensor, " ..."]:
@@ -393,7 +411,8 @@ def run_silu(in_features: Float[Tensor, " ..."]) -> Float[Tensor, " ..."]:
         Float[Tensor,"..."]: of with the same shape as `in_features` with the output of applying
         SiLU to each element.
     """
-    raise NotImplementedError
+    sigmoid_scale = torch.sigmoid(in_features)
+    return in_features * sigmoid_scale
 
 
 def run_get_batch(
@@ -460,7 +479,29 @@ def run_gradient_clipping(parameters: Iterable[torch.nn.Parameter], max_l2_norm:
 
     The gradients of the parameters (parameter.grad) should be modified in-place.
     """
-    raise NotImplementedError
+    eps = 1e-10
+    grads = []
+    for param in parameters:
+        # If gradient exists
+        if param.grad is not None:
+            grads.append(param.grad)
+
+    # If no gradient exists, return
+    if not grads:
+        return
+
+    total_norm = torch.norm(
+        torch.stack([torch.norm(g.detach(), 2) for g in grads]), 
+        2
+    )
+    clipping_coefficient = max_l2_norm / (total_norm + eps)
+
+    # Apply clipping if needed
+    if clipping_coefficient >= 1:
+        return
+    
+    for grad in grads:
+        grad.detach_().mul_(clipping_coefficient)
 
 
 def get_adamw_cls() -> type[torch.optim.Optimizer]:
@@ -588,4 +629,10 @@ def run_train_bpe(
                 representing that <token1> was merged with <token2>.
                 Merges are ordered by order of creation.
     """
-    raise NotImplementedError
+    return train_bpe(
+        input_path=input_path,
+        vocab_size=vocab_size,
+        special_tokens=special_tokens,
+        num_processes=1
+        # **kwargs,
+    )
