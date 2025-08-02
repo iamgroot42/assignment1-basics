@@ -2,10 +2,7 @@ import torch
 import torch.nn as nn
 
 from cs336_basics.linear import Linear
-
-
-def silu(x: torch.Tensor) -> torch.Tensor:
-    return x * torch.sigmoid(x)
+from cs336_basics.utils import silu
 
 
 class SwiGLU(nn.Module):

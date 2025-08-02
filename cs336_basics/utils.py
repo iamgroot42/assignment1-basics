@@ -2,6 +2,7 @@
 
 import torch
 import torch.nn as nn
+from einops import einsum
 
 
 def silu(x: torch.Tensor) -> torch.Tensor:
@@ -13,11 +14,13 @@ def softmax(x: torch.Tensor, dim: int = -1) -> torch.Tensor:
     return exp_x / exp_x.sum(dim=dim, keepdim=True)
 
 
-def attention(Q: torch.Tensor, K: torch.Tensor,
-              V: torch.Tensor, mask: torch.Tensor | None = None) -> torch.Tensor:
+def self_attention(Q: torch.Tensor,
+                   K: torch.Tensor,
+                   V: torch.Tensor,
+                   mask: torch.Tensor | None = None) -> torch.Tensor:
     d_k = Q.shape[-1]
     # We need to perform softmax(Q @ K / sqrt(d)) @ V
-    QK = Q.matmul(K.transpose(-2, -1))
+    QK = einsum(Q, K, "batch_size ... n d_k, batch_size ... m d_k -> batch_size ... n m")
     # Scale outputs
     QK = QK / (d_k ** 0.5)
     # Apply mask (fill out everything not in mask with inf)
@@ -25,5 +28,5 @@ def attention(Q: torch.Tensor, K: torch.Tensor,
     # Apply softmax
     QK = softmax(QK, dim=-1)
     # Multiply by V
-    out = QK.matmul(V)
+    out = einsum(QK, V, "batch_size ... n m, batch_size ... m d_v -> batch_size ... n d_v")
     return out
