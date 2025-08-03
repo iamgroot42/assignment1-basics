@@ -3,14 +3,18 @@ import torch.nn as nn
 
 from cs336_basics.linear import Linear
 from cs336_basics.utils import self_attention
+from cs336_basics.rope import RotaryPositionalEmbedding
 
 
 class MultiHeadSelfAttention(nn.Module):
-    def __init__(self, d_model: int, num_heads: int, device=None, dtype=None):
+    def __init__(self, d_model: int, num_heads: int,
+                 rope_layer: RotaryPositionalEmbedding = None,
+                 device=None, dtype=None):
         super().__init__()
         self.num_heads =num_heads
         self.d_model = d_model
         self.device = device
+        self.rope_layer = rope_layer
         self.q_proj = Linear(d_model, d_model, device=device, dtype=dtype)
         self.k_proj = Linear(d_model, d_model, device=device, dtype=dtype)
         self.v_proj = Linear(d_model, d_model, device=device, dtype=dtype)
@@ -31,6 +35,13 @@ class MultiHeadSelfAttention(nn.Module):
         q = q.transpose(1, 2)
         k = k.transpose(1, 2)
         v = v.transpose(1, 2)
+
+        if self.rope_layer is not None:
+            # Apply rotary positional embedding
+            token_positions = torch.arange(x.shape[-2], device=self.device).unsqueeze(0).expand(q.shape[:-1])
+            # Apply to q, k
+            q = self.rope_layer(q, token_positions)
+            k = self.rope_layer(k, token_positions)
         
         seq_len = x.shape[-2]
         causal_mask = torch.triu(torch.ones(seq_len, seq_len, device=self.device), diagonal=1)
