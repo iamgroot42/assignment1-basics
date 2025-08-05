@@ -1,7 +1,9 @@
 
 
+import numpy as np
 import torch
 import torch.nn as nn
+from typing import Iterable
 from einops import einsum
 
 from jaxtyping import Float, Int
@@ -52,3 +54,41 @@ def cross_entropy(inputs: Float[torch.Tensor, " batch_size vocab_size"],
     
     # Return the mean of the negative log likelihood
     return nll.mean()
+
+
+def lr_cosine_schedule(it: int,
+    max_learning_rate: float,
+    min_learning_rate: float,
+    warmup_iters: int,
+    cosine_cycle_iters: int) -> float:
+    if it < warmup_iters:
+        return it * max_learning_rate / warmup_iters
+    elif it < cosine_cycle_iters:
+        return min_learning_rate + 0.5 * (1 + np.cos(np.pi * (it - warmup_iters) / (cosine_cycle_iters - warmup_iters))) * (max_learning_rate - min_learning_rate)
+    else:
+        return min_learning_rate
+
+
+def clip_gradient(parameters: Iterable[torch.nn.Parameter], max_l2_norm: float, eps: float = 1e-10) -> None:
+    grads = []
+    for param in parameters:
+        # If gradient exists
+        if param.grad is not None:
+            grads.append(param.grad)
+
+    # If no gradient exists, return
+    if not grads:
+        return
+
+    total_norm = torch.norm(
+        torch.stack([torch.norm(g.detach(), 2) for g in grads]), 
+        2
+    )
+    clipping_coefficient = max_l2_norm / (total_norm + eps)
+
+    # Apply clipping if needed
+    if clipping_coefficient >= 1:
+        return
+    
+    for grad in grads:
+        grad.detach_().mul_(clipping_coefficient)
