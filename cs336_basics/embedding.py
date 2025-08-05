@@ -17,6 +17,6 @@ class Embedding(nn.Module):
 
     def forward(self, token_ids: torch.Tensor) -> torch.Tensor:
         token_ids_shape = token_ids.shape
-        token_ids = token_ids.view(-1, 1)
+        token_ids = token_ids.flatten().unsqueeze(-1)
         embeddings = self.W[token_ids].view(*token_ids_shape, -1)
         return embeddings

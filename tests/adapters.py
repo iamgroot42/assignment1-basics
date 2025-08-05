@@ -16,7 +16,7 @@ from cs336_basics.rmsnorm import RMSNorm
 from cs336_basics.swiglu import SwiGLU
 from cs336_basics.rope import RotaryPositionalEmbedding
 from cs336_basics.mha import MultiHeadSelfAttention
-from cs336_basics.transformer import TransformerBlock
+from cs336_basics.transformer import TransformerBlock, Transformer
 from cs336_basics.utils import softmax, silu, self_attention
 
 def run_linear(
@@ -400,7 +400,29 @@ def run_transformer_lm(
         Float[Tensor, "batch_size sequence_length vocab_size"]: Tensor with the predicted unnormalized
         next-word distribution for each token.
     """
-    raise NotImplementedError
+    model = Transformer(vocab_size=vocab_size, context_length=context_length,
+                        num_layers=num_layers, num_heads=num_heads, d_model=d_model, d_ff=d_ff,
+                        rope_theta=rope_theta)
+    # Load weights account for fact that there are vaiable num_layers
+    for layer_idx in range(num_layers):
+        model.layers[layer_idx].load_state_dict({
+            "attn.q_proj.W": weights[f"layers.{layer_idx}.attn.q_proj.weight"],
+            "attn.k_proj.W": weights[f"layers.{layer_idx}.attn.k_proj.weight"],
+            "attn.v_proj.W": weights[f"layers.{layer_idx}.attn.v_proj.weight"],
+            "attn.o_proj.W": weights[f"layers.{layer_idx}.attn.output_proj.weight"],
+            "ln1.gain": weights[f"layers.{layer_idx}.ln1.weight"],
+            "ffn.w1.W": weights[f"layers.{layer_idx}.ffn.w1.weight"],
+            "ffn.w2.W": weights[f"layers.{layer_idx}.ffn.w2.weight"],
+            "ffn.w3.W": weights[f"layers.{layer_idx}.ffn.w3.weight"],
+            "ln2.gain": weights[f"layers.{layer_idx}.ln2.weight"],
+        })
+    # Load rest of weights
+    model.embedding.load_state_dict({"W": weights["token_embeddings.weight"]})
+    model.ln_final.load_state_dict({"gain": weights["ln_final.weight"]})
+    model.lm_head.load_state_dict({"W": weights["lm_head.weight"]})
+    # Get logits
+    logits = model(in_indices)
+    return logits
 
 
 def run_rmsnorm(
