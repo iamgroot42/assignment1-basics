@@ -5,12 +5,15 @@ import torch
 import torch.nn as nn
 from typing import Iterable
 from einops import einsum
+import os
+from typing import BinaryIO, IO
 
 from jaxtyping import Float, Int
 
 
 def silu(x: torch.Tensor) -> torch.Tensor:
     return x * torch.sigmoid(x)
+
 
 def softmax(x: torch.Tensor, dim: int = -1) -> torch.Tensor:
     x_ = x - x.max(dim=dim, keepdim=True).values
@@ -92,3 +95,29 @@ def clip_gradient(parameters: Iterable[torch.nn.Parameter], max_l2_norm: float, 
     
     for grad in grads:
         grad.detach_().mul_(clipping_coefficient)
+
+
+def save_checkpoint(
+    model: torch.nn.Module,
+    optimizer: torch.optim.Optimizer,
+    iteration: int,
+    out: str | os.PathLike | BinaryIO | IO[bytes],
+):
+    model_info = model.state_dict()
+    optim_info = optimizer.state_dict()
+    obj = {
+        "model": model_info,
+        "optim": optim_info,
+        "iteration": iteration
+    }
+    torch.save(obj, out)
+
+
+def load_checkpoint(
+        src: str | os.PathLike | BinaryIO | IO[bytes],
+        model: torch.nn.Module,
+        optimizer: torch.optim.Optimizer):
+    obj = torch.load(src)
+    model.load_state_dict(obj['model'])
+    optimizer.load_state_dict(obj['optim'])
+    return obj['iteration']
