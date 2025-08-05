@@ -4,6 +4,8 @@ import torch
 import torch.nn as nn
 from einops import einsum
 
+from jaxtyping import Float, Int
+
 
 def silu(x: torch.Tensor) -> torch.Tensor:
     return x * torch.sigmoid(x)
@@ -30,3 +32,23 @@ def self_attention(Q: torch.Tensor,
     # Multiply by V
     out = einsum(QK, V, "batch_size ... n m, batch_size ... m d_v -> batch_size ... n d_v")
     return out
+
+
+def cross_entropy(inputs: Float[torch.Tensor, " batch_size vocab_size"],
+                  targets: Int[torch.Tensor, " batch_size"]) -> Float[torch.Tensor, ""]:
+    # Use the same numerical stability trick as your softmax function
+    inputs_max = inputs.max(dim=-1, keepdim=True).values
+    inputs_stable = inputs - inputs_max
+    
+    # Compute log-softmax directly: log(exp(x_i) / sum(exp(x_j))) = x_i - log(sum(exp(x_j)))
+    log_sum_exp = torch.log(torch.exp(inputs_stable).sum(dim=-1, keepdim=True))
+    log_probs = inputs_stable - log_sum_exp
+    
+    # Gather the log probabilities for the target classes
+    target_log_probs = log_probs.gather(dim=-1, index=targets.unsqueeze(-1)).squeeze(-1)
+    
+    # Compute negative log likelihood
+    nll = -target_log_probs
+    
+    # Return the mean of the negative log likelihood
+    return nll.mean()
