@@ -17,6 +17,7 @@ from cs336_basics.swiglu import SwiGLU
 from cs336_basics.rope import RotaryPositionalEmbedding
 from cs336_basics.mha import MultiHeadSelfAttention
 from cs336_basics.transformer import TransformerBlock, Transformer
+from cs336_basics.optim import AdamW
 from cs336_basics.utils import softmax, silu, self_attention, cross_entropy
 
 def run_linear(
@@ -559,7 +560,7 @@ def get_adamw_cls() -> Any:
     """
     Returns a torch.optim.Optimizer that implements AdamW.
     """
-    raise NotImplementedError
+    return AdamW
 
 
 def run_get_lr_cosine_schedule(
